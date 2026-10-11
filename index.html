@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON VOYAGER — интерактивная станция</title>
+<meta name="description" content="Интерактивная космическая станция в одной странице: мини-игра «Ловец комет», неоновый синтезатор и звёздное поле. Чистый HTML/CSS/JS.">
+<meta name="theme-color" content="#05060f">
+<meta property="og:type" content="website">
+<meta property="og:title" content="NEON VOYAGER — интерактивная станция">
+<meta property="og:description" content="Мини-игра, синтезатор и звёздное поле в одной странице. Кликай и играй прямо в браузере.">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div id="glow"></div>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="badge">● INTERACTIVE STATION ONLINE</div>
+    <h1><span class="glitch">NEON</span><br>VOYAGER</h1>
+    <p class="sub">Интерактивная космическая станция в одной странице. Кликай по звёздам, ловите кометы, играй на синтезаторе — всё вживую, без загрузок.</p>
+    <div class="cta">
+      <a class="btn primary" href="#game">🎮 Играть</a>
+      <a class="btn" href="#synth">🎹 Синтезатор</a>
+      <button class="btn" id="soundBtn">🔈 Звук: выкл</button>
+      <button class="btn" id="surpriseBtn">✨ Сюрприз</button>
+    </div>
+    <div class="scroll-hint">листай вниз ↓</div>
+  </header>
+
+  <section id="about">
+    <h2 class="sec-title reveal">Что здесь происходит</h2>
+    <p class="sec-sub reveal">Никаких библиотек и фреймворков — только чистые HTML, CSS и JavaScript. Всё рисуется на canvas и Web Audio прямо в браузере.</p>
+  </section>
+
+  <section id="game">
+    <h2 class="sec-title reveal">🎮 Ловец комет</h2>
+    <p class="sec-sub reveal">Кликай по светящимся кометам за 30 секунд. Серии попаданий без промаха дают множитель. Пробел — старт/рестарт.</p>
+    <div class="game-shell reveal">
+      <div class="game-top">
+        <div class="stats">
+          <div class="stat"><b id="score">0</b><span>Очки</span></div>
+          <div class="stat"><b id="combo">x1</b><span>Серия</span></div>
+          <div class="stat"><b id="time">30</b><span>Секунд</span></div>
+          <div class="stat"><b id="best">0</b><span>Рекорд</span></div>
+        </div>
+        <button class="btn" id="gameBtn">Старт</button>
+      </div>
+      <div class="field" id="field">
+        <div class="overlay" id="gameOverlay">
+          <h3>Готов к запуску?</h3>
+          <p>Жми «Старт» или <span class="kbd">Space</span>. Собирай кометы, не давай им улететь.</p>
+          <button class="btn primary" id="overlayBtn">Начать игру</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="synth">
+    <h2 class="sec-title reveal">🎹 Неоновый синтезатор</h2>
+    <p class="sec-sub reveal">8 нот, которые можно играть мышкой или клавишами <span class="kbd">1</span>…<span class="kbd">8</span>. Включи звук сверху и сыграй что-нибудь.</p>
+    <div class="reveal">
+      <div class="pad-grid" id="pads"></div>
+      <div class="viz" id="viz"></div>
+    </div>
+  </section>
+
+  <footer>
+    Сделано с ✦ в NEON VOYAGER · чистый HTML/CSS/JS · <span id="year"></span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------- Звёздное поле (canvas) ---------------- */
+(function(){
+  const cv = document.getElementById('stars');
+  const ctx = cv.getContext('2d');
+  let w, h, dpr, stars = [], bursts = [], mouse = {x:-9999,y:-9999};
+  const COLORS = ['#22f7ff','#9b6bff','#ff2fd6','#8dff5a','#ffffff'];
+
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = cv.width = innerWidth * dpr;
+    h = cv.height = innerHeight * dpr;
+    cv.style.width = innerWidth + 'px';
+    cv.style.height = innerHeight + 'px';
+    const count = Math.min(260, Math.floor(innerWidth * innerHeight / 9000));
+    stars = Array.from({length: count}, () => ({
+      x: Math.random()*w, y: Math.random()*h,
+      z: Math.random()*0.8 + 0.2,
+      r: Math.random()*1.7 + 0.4,
+      c: Math.random() < 0.75 ? '#dfe6ff' : COLORS[Math.floor(Math.random()*COLORS.length)],
+      tw: Math.random()*Math.PI*2
+    }));
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  addEventListener('pointermove', e => { mouse.x = e.clientX*dpr; mouse.y = e.clientY*dpr; });
+  addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
+
+  // вспышка по клику
+  addEventListener('pointerdown', e => {
+    burst(e.clientX*dpr, e.clientY*dpr);
+  });
+
+  function burst(x, y, n){
+    n = n || 22;
+    for (let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2, sp = (Math.random()*4+1)*dpr;
+      bursts.push({x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life:1, c:COLORS[Math.floor(Math.random()*COLORS.length)]});
+    }
+  }
+  window.__burst = burst;
+
+  function loop(t){
+    ctx.clearRect(0,0,w,h);
+    for (const s of stars){
+      // параллакс к курсору
+      const dx = (mouse.x - s.x)/(900/s.z), dy = (mouse.y - s.y)/(900/s.z);
+      const px = s.x + dx, py = s.y + dy;
+      const tw = 0.55 + 0.45*Math.sin(t*0.002 + s.tw);
+      ctx.globalAlpha = tw;
+      ctx.fillStyle = s.c;
+      ctx.beginPath();
+      ctx.arc(px, py, s.r*s.z*dpr, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    for (let i=bursts.length-1;i>=0;i--){
+      const p = bursts[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.04*dpr; p.vx *= 0.99; p.vy *= 0.99;
+      p.life -= 0.018;
+      if (p.life <= 0){ bursts.splice(i,1); continue; }
+      ctx.globalAlpha = Math.max(p.life,0);
+      ctx.fillStyle = p.c;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.1*dpr*p.life + .5, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+/* ---------------- Курсор-свечение (только там, где есть курсор) ---------------- */
+(function(){
+  const g = document.getElementById('glow');
+  if (matchMedia('(pointer:coarse)').matches || matchMedia('(prefers-reduced-motion:reduce)').matches){
+    g.style.display = 'none';
+    return;
+  }
+  addEventListener('pointermove', e => { g.style.left = e.clientX+'px'; g.style.top = e.clientY+'px'; });
+})();
+
+/* ---------------- Появление блоков при скролле ---------------- */
+(function(){
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); }), {threshold:.16});
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+})();
+
+/* ---------------- Звук (Web Audio) ---------------- */
+const Sound = (function(){
+  let ctx = null, on = false;
+  function ensure(){ if (!ctx){ ctx = new (window.AudioContext||window.webkitAudioContext)(); } if (ctx.state === 'suspended') ctx.resume(); }
+  function tone(freq, dur, type, vol){
+    if (!on) return;
+    ensure();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(vol || 0.15, ctx.currentTime + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (dur || 0.3));
+    o.connect(g).connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + (dur || 0.3) + 0.05);
+  }
+  return {
+    get on(){ return on; },
+    toggle(){ ensure(); on = !on; if (on) tone(660, .18, 'triangle', .12); return on; },
+    blip(f){ tone(f, .16, 'triangle', .14); },
+    hit(f){ tone(f, .09, 'square', .10); },
+    miss(){ tone(150, .22, 'sawtooth', .12); },
+    win(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,.24,'triangle',.14), i*90)); }
+  };
+})();
+
+/* ---------------- Тост ---------------- */
+const toastEl = document.getElementById('toast');
+let toastT;
+function toast(msg){
+  toastEl.textContent = msg; toastEl.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(()=>toastEl.classList.remove('show'), 2200);
+}
+
+/* ---------------- Конфетти ---------------- */
+function confetti(n){
+  n = n || 90;
+  const colors = ['#22f7ff','#9b6bff','#ff2fd6','#8dff5a','#ffd93d'];
+  for (let i=0;i<n;i++){
+    const d = document.createElement('div');
+    d.className = 'confetti';
+    d.style.background = colors[i%colors.length];
+    d.style.left = (Math.random()*100) + 'vw';
+    d.style.top = '-20px';
+    document.body.appendChild(d);
+    const dur = 2200 + Math.random()*2200;
+    const dx = (Math.random()*2-1)*260;
+    d.animate(
+      [{transform:'translate(0,0) rotate(0deg)', opacity:1},
+       {transform:`translate(${dx}px, ${innerHeight+80}px) rotate(${Math.random()*900-450}deg)`, opacity:.9}],
+      {duration:dur, easing:'cubic-bezier(.3,.7,.4,1)'}
+    ).onfinish = () => d.remove();
+  }
+}
+
+/* ---------------- Кнопки в шапке ---------------- */
+document.getElementById('soundBtn').addEventListener('click', e => {
+  const on = Sound.toggle();
+  e.currentTarget.textContent = on ? '🔊 Звук: вкл' : '🔈 Звук: выкл';
+  toast(on ? 'Звук включён' : 'Звук выключен');
+});
+document.getElementById('surpriseBtn').addEventListener('click', () => {
+  confetti(140);
+  window.__burst(innerWidth/2, innerHeight/3, 60);
+  toast('✦ Сюрприз! ✦');
+});
+
+/* ---------------- ИГРА: Ловец комет ---------------- */
+(function(){
+  const field = document.getElementById('field');
+  const overlay = document.getElementById('gameOverlay');
+  const scoreEl = document.getElementById('score');
+  const comboEl = document.getElementById('combo');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const gameBtn = document.getElementById('gameBtn');
+  const overlayBtn = document.getElementById('overlayBtn');
+
+  const COLORS = ['#22f7ff','#9b6bff','#ff2fd6','#8dff5a'];
+  const DURATION = 30;
+  const TOUCH = matchMedia('(pointer:coarse)').matches;
+  let comets = [], score = 0, combo = 0, timeLeft = DURATION, running = false;
+  let rafId = null, lastSpawn = 0, lastTick = 0, spawnEvery = 620;
+  let best = +(localStorage.getItem('nv_best') || 0);
+  bestEl.textContent = best;
+
+  function reset(){
+    comets.forEach(c => c.el.remove());
+    comets = []; score = 0; combo = 0; timeLeft = DURATION; lastSpawn = 0; lastTick = 0; spawnEvery = 620;
+    scoreEl.textContent = 0; comboEl.textContent = 'x1'; timeEl.textContent = DURATION;
+  }
+
+  function spawn(){
+    const el = document.createElement('div');
+    el.className = 'comet';
+    const color = COLORS[Math.floor(Math.random()*COLORS.length)];
+    const size = (TOUCH ? 38 : 26) + Math.random() * (TOUCH ? 24 : 30);
+    const x = Math.random() * Math.max(1, field.clientWidth - size);
+    const speed = 55 + Math.random()*70 + (DURATION - timeLeft)*4;
+    el.style.width = el.style.height = size + 'px';
+    el.style.color = color;
+    el.style.background = `radial-gradient(circle at 35% 30%, #fff, ${color} 55%, transparent 72%)`;
+    el.style.left = x + 'px';
+    el.style.top = '-50px';
+    const c = { el, x, y:-50, speed, size, alive:true };
+    el.addEventListener('pointerdown', ev => { ev.stopPropagation(); hit(c); });
+    field.appendChild(el);
+    comets.push(c);
+  }
+
+  function hit(c){
+    if (!c.alive) return;
+    c.alive = false; combo++;
+    const gain = 10 * Math.min(1 + Math.floor(combo/5), 5);
+    score += gain;
+    scoreEl.textContent = score;
+    comboEl.textContent = 'x' + Math.min(1 + Math.floor(combo/5), 5);
+    Sound.hit(520 + Math.min(combo,10)*40);
+    const ft = document.createElement('div');
+    ft.className = 'float-txt';
+    ft.textContent = '+' + gain;
+    ft.style.left = c.x + 'px'; ft.style.top = c.y + 'px';
+    field.appendChild(ft);
+    setTimeout(()=>ft.remove(), 800);
+    c.el.style.transition = 'transform .18s, opacity .18s';
+    c.el.style.transform = 'scale(1.9)'; c.el.style.opacity = '0';
+    setTimeout(()=>c.el.remove(), 190);
+    comets = comets.filter(x => x !== c);
+  }
+
+  function end(){
+    running = false;
+    cancelAnimationFrame(rafId); rafId = null;
+    comets.forEach(c => c.el.remove()); comets = [];
+    if (score > best){ best = score; localStorage.setItem('nv_best', best); bestEl.textContent = best; }
+    overlay.classList.remove('hidden');
+    overlay.innerHTML = `<h3>Время вышло!</h3><p>Очки: <b>${score}</b> · Рекорд: <b>${best}</b></p><button class="btn primary" id="againBtn">Ещё раз</button>`;
+    document.getElementById('againBtn').addEventListener('click', start);
+    Sound.win(); confetti(score > 200 ? 120 : 60);
+    gameBtn.textContent = 'Старт';
+  }
+
+  function start(){
+    reset();
+    overlay.classList.add('hidden');
+    running = true;
+    gameBtn.textContent = 'Стоп';
+    lastTick = performance.now();
+    loop(performance.now());
+  }
+
+  function loop(t){
+    if (!running) return;
+    const dt = Math.min((t - lastTick)/1000, 0.05);
+    lastTick = t;
+    timeLeft -= dt;
+    timeEl.textContent = Math.max(0, Math.ceil(timeLeft));
+
+    if (t - lastSpawn > spawnEvery){
+      lastSpawn = t;
+      spawnEvery = Math.max(300, 620 - (DURATION - timeLeft)*10);
+      spawn(); if (Math.random() < 0.25) spawn();
+    }
+
+    const fh = field.clientHeight;
+    for (let i=comets.length-1;i>=0;i--){
+      const c = comets[i];
+      c.y += c.speed * dt;
+      c.el.style.top = c.y + 'px';
+      c.el.style.transform = `rotate(${c.y*0.3}deg)`;
+      if (c.y > fh + 10){
+        c.el.remove(); comets.splice(i,1);
+        if (timeLeft > 0){ combo = 0; comboEl.textContent = 'x1'; Sound.miss(); }
+      }
+    }
+
+    if (timeLeft <= 0){ end(); return; }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  gameBtn.addEventListener('click', () => { if (running){ end(); } else { start(); } });
+  overlayBtn.addEventListener('click', start);
+  addEventListener('keydown', e => {
+    if (e.code === 'Space' && !e.repeat){
+      const tag = (document.activeElement||{}).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      if (!running) start();
+    }
+  });
+})();
+
+/* ---------------- СИНТЕЗАТОР ---------------- */
+(function(){
+  const NOTES = [
+    {n:'C4', f:261.63},{n:'D4', f:293.66},{n:'E4', f:329.63},{n:'G4', f:392.00},
+    {n:'A4', f:440.00},{n:'C5', f:523.25},{n:'E5', f:659.25},{n:'G5', f:783.99}
+  ];
+  const padsEl = document.getElementById('pads');
+  const viz = document.getElementById('viz');
+  const bars = [];
+  for (let i=0;i<28;i++){ const b = document.createElement('i'); viz.appendChild(b); bars.push(b); }
+
+  const padEls = NOTES.map((note, i) => {
+    const p = document.createElement('div');
+    p.className = 'pad';
+    p.innerHTML = `<small>${i+1}</small><span>${note.n}</span>`;
+    p.addEventListener('pointerdown', ev => fire(i, ev));
+    padsEl.appendChild(p);
+    return p;
+  });
+
+  function fire(i, ev){
+    const p = padEls[i];
+    p.classList.add('on');
+    setTimeout(()=>p.classList.remove('on'), 180);
+    Sound.blip(NOTES[i].f);
+    if (ev){
+      const r = p.getBoundingClientRect();
+      const rip = document.createElement('span');
+      rip.className = 'ripple';
+      rip.style.left = (ev.clientX - r.left) + 'px';
+      rip.style.top = (ev.clientY - r.top) + 'px';
+      rip.style.width = rip.style.height = '14px';
+      p.appendChild(rip); setTimeout(()=>rip.remove(), 600);
+    }
+  }
+
+  addEventListener('keydown', e => {
+    const k = +e.key;
+    if (k >= 1 && k <= 8) fire(k-1, null);
+  });
+
+  // визуализатор (лёгкая симуляция)
+  let phase = 0, energy = [];
+  for (let i=0;i<28;i++) energy.push(0);
+  function anim(){
+    phase += 0.06;
+    const active = padEls.some(p => p.classList.contains('on'));
+    for (let i=0;i<bars.length;i++){
+      const target = padEls.some((p,idx)=>p.classList.contains('on') && Math.abs(idx - (i%8)) < 2)
+        ? (0.65 + 0.35*Math.sin(phase + i)) : (0.05 + 0.05*Math.abs(Math.sin(phase*0.4 + i*0.5)));
+      energy[i] += (target - energy[i]) * 0.25;
+      bars[i].style.height = (energy[i]*100) + '%';
+    }
+    requestAnimationFrame(anim);
+  }
+  anim();
+})();
+
+document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
